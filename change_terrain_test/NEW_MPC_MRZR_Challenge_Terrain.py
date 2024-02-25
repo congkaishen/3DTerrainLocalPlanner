@@ -150,23 +150,18 @@ def VehicleDynamics3D(states, ctrl, param):
     ax          = ctrl[1]
 
 
-    # zparx = param[0]
-    # zpary = param[1]
-    # zparxx = param[2]
-    # zparyy = param[3]
-    # zparxy = param[4]
+    zparx = param[0]
+    zpary = param[1]
+    zparxx = param[2]
+    zparyy = param[3]
+    zparxy = param[4]
 
-    zparx = -0.4 * cos(x/15) * sin(y/15)*9/6
-    zpary = -0.4 * sin(x/15) * cos(y/15)*9/6
-    zparxx = 0.4/15*sin(x/15)*sin(y/15)*9/6
-    zparyy = 0.4/15*sin(x/15)*sin(y/15)*9/6
-    zparxy = -0.4/15*cos(x/15)*cos(y/15)*9/6
+    # zparx = -0.4 * cos(x/15) * sin(y/15)*9/6
+    # zpary = -0.4 * sin(x/15) * cos(y/15)*9/6
+    # zparxx = 0.4/15*sin(x/15)*sin(y/15)*9/6
+    # zparyy = 0.4/15*sin(x/15)*sin(y/15)*9/6
+    # zparxy = -0.4/15*cos(x/15)*cos(y/15)*9/6
 
-    # zparx = 0.0
-    # zpary = 0.3
-    # zparxx = 0.0
-    # zparyy = 0.0
-    # zparxy = 0.0
 
 
     normal_vec  = horzcat(-(zparx), -(zpary) , 1)
@@ -489,6 +484,38 @@ def defineSolver(init_states, goal, obslist, OCPParams):
     return [solver, lbw, ubw, lbg, ubg]
 
 
+
+def getTerParams(w_opt):
+    x_opt = w_opt[1::9]
+    y_opt = w_opt[2::9]
+    psi_opt = w_opt[3::9]
+    v_opt = w_opt[4::9]
+    r_opt = w_opt[5::9]
+    ux_opt=  w_opt[6::9]
+    sa_opt = w_opt[7::9]
+    sr_opt = w_opt[8::9]
+    ax_opt = w_opt[9::9]
+    # params = np.empty((5), float)
+    
+    for i in range(10+1):
+        x = x_opt[i]
+        y = y_opt[i]
+        zparx = -0.4 * cos(x/15) * sin(y/15)*9/6
+        zpary = -0.4 * sin(x/15) * cos(y/15)*9/6
+        zparxx = 0.4/15*sin(x/15)*sin(y/15)*9/6
+        zparyy = 0.4/15*sin(x/15)*sin(y/15)*9/6
+        zparxy = -0.4/15*cos(x/15)*cos(y/15)*9/6
+
+        if i == 0:
+            params = np.array([zparx, zpary, zparxx, zparyy,zparxy])
+        else:
+            param = np.array([zparx, zpary, zparxx, zparyy,zparxy])
+            params = np.hstack((params, param))
+
+    # print(params)
+    return params
+
+
 def main():
     # Terrain Parameter:
     # Specifty OCP parameters
@@ -523,7 +550,13 @@ def main():
     goal = [100, 100]
     obslist = np.matrix([[50, 50, 25, 25],[15,15,8,8],[70, 10, 10, 10],[10, 70, 10, 10],[50, 90, 10, 10],[90, 50, 10, 10]])
     init_states = np.array([0.1, 0.1 , 0.01, 0.1, 0.1, 5.1, 0.01])
-    params = np.tile(np.array([zparx, zpary, zparxx, zparyy,zparxy]), OCPParams["Nck"]+1)
+
+    w_opt = np.hstack([1e-3,  np.tile(np.hstack([init_states, np.array([0.01, 0.01])]), OCPParams["Nck"]+1)])  #np.zeros(Nck*(7+2)+1)
+    w_opt[0] = 0.0
+
+
+    params = getTerParams(w_opt)
+    # params = np.tile(np.array([zparx, zpary, zparxx, zparyy,zparxy]), OCPParams["Nck"]+1)
     
     solver, lbw, ubw, lbg, ubg = defineSolver(init_states, goal, obslist, OCPParams)
 ###########################
@@ -537,8 +570,7 @@ def main():
     w_opt_list = np.empty((0,100), float)
     solve_time_list = np.empty((0, 1), float)
 
-    w_opt = np.hstack([1e-3,  np.tile(np.hstack([init_states, np.array([0.01, 0.01])]), OCPParams["Nck"]+1)])  #np.zeros(Nck*(7+2)+1)
-    w_opt[0] = 0.0
+    
 
     while(True):
         if os.path.exists("stop.txt"):
@@ -566,11 +598,13 @@ def main():
 
                 nx = OCPParams["nx"]
                 lbw[1:nx+1] = ubw[1:nx+1] = predicted_init_states # current iteration
-                w_opt = np.hstack([1e-3,  np.tile(np.hstack([predicted_init_states.T, np.array([1e-3, 0])]), OCPParams["Nck"]+1)])  #np.zeros(Nck*(7+2)+1)
+                # w_opt = np.hstack([1e-3,  np.tile(np.hstack([predicted_init_states.T, np.array([1e-3, 0])]), OCPParams["Nck"]+1)])  #np.zeros(Nck*(7+2)+1)
 
 
                 # params = np.tile(np.array([zparx, 0.4, zparxx, zparyy,zparxy]), OCPParams["Nck"]+1)
-                # w_opt[1:nx+1] = predicted_init_states
+                w_opt[1:nx+1] = predicted_init_states
+                params = getTerParams(w_opt)
+
 
                 sol = solver(lbx = lbw,
                         ubx = ubw,
@@ -579,6 +613,7 @@ def main():
                         lbg = lbg,
                         ubg = ubg)
                 w_opt = sol["x"].full().flatten()
+                # params = getTerParams(w_opt)
 
 
                 ocp_end = time.time()

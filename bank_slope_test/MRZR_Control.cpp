@@ -560,7 +560,7 @@ void run_sim() {
         records << mytime << "," << state[0] << "," << state[1] << "," << state[2] << "," << q_temp.e0() << "," << q_temp.e1() << "," << q_temp.e2() << "," << q_temp.e3() << "," << velocity.x() << "," << velocity.y() << "," << velocity.z() << "," << driver_inputs.m_steering * 0.4554 << "," << driver_inputs.m_throttle<<","<<ux_list[control_idx]<<","<<ax_list[control_idx] << std::endl;
         tires << alpha_fl << "," << kappa_fl << "," << F_fl.x() << "," << F_fl.y() << "," << F_fl.z() << "," << M_fl.x() << "," << M_fl.y() << "," << M_fl.z() << "," << alpha_fr << "," << kappa_fr << "," << F_fr.x() << "," << F_fr.y() << "," << F_fr.z() << "," << M_fr.x() << "," << M_fr.y() << "," << M_fr.z() << "," << alpha_rl << "," << kappa_rl << "," << F_rl.x() << "," << F_rl.y() << "," << F_rl.z() << "," << M_rl.x() << "," << M_rl.y() << "," << M_rl.z() << "," << alpha_rr << "," << kappa_rr << "," << F_rr.x() << "," << F_rr.y() << "," << F_rr.z() << "," << M_rr.x() << "," << M_rr.y() << "," << M_rr.z() << std::endl;
 
-        if ((sim_count % 500) == 0) {
+        if ((sim_count % 100) == 0) {
             std::ofstream cur_states;
             cur_states.open("E:/STUDY_UMICH/WIN2023/Local_Controller/" + outputfile_name + "cur_states.txt", std::ios::out);
             cur_states << mytime << "\t" << state[0] << "\t" << state[1]<<"\t" << Q_to_Euler123(q_temp).z() << "\t"  << velocity.y() <<"\t" << 0.0 <<"\t"<<velocity.x()<< "\t"<< driver_inputs.m_steering * 0.4554 << std::endl;
@@ -575,7 +575,7 @@ void run_sim() {
                     send_signal.close();
                     controls.open("MPC_cmd.txt");
                     std::cout << "The current time is:"<< mytime <<"; " << "MPC file exists" << std::endl;
-                    for (int readidx = 0; readidx < 500; readidx++) {
+                    for (int readidx = 0; readidx < 100; readidx++) {
                         controls >> sa_list[readidx];
                         controls >> ax_list[readidx];
                         controls >> ux_list[readidx];

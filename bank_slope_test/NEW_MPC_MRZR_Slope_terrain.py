@@ -188,14 +188,14 @@ def VehicleDynamics3D(states, ctrl, param):
     I_matrix    = vertcat(horzcat(dot(xps, xps),  dot(xps, xpy)),horzcat(dot(xps, xpy),  dot(xpy, xpy)))
     J_matrix    = vertcat(horzcat(dot(xps, eb1),  dot(xps, eb2)),horzcat(dot(eb1, xpy),  dot(eb2, xpy)))    
     II_matrix   = vertcat(horzcat(dot(xpss, eb3),  dot(xpsy, eb3)),horzcat(dot(xpys, eb3),  dot(xpyy, eb3)))
-    b_omega     = inv(J_matrix)@II_matrix@inv(I_matrix)@J_matrix@vertcat(ux, v)
+    b_omega     = pinv(J_matrix)@II_matrix@pinv(I_matrix)@J_matrix@vertcat(ux, v)
 
     wx          = b_omega[1]
     wy          = -b_omega[0]
 
     G           = R.T @ vertcat(0,0,-g)
     gx          = G[0]
-    gy          = G[1]
+    gy          = -g*(cos(psi)*sin(phi) + cos(phi)*sin(psi)*sin(theta))
     gz          = -G[2] + v * wx - ux * wy
 
     FZF         = 2*(KFZF * gz - (ax - r * v - gx) * KFZX)
@@ -221,16 +221,24 @@ def VehicleDynamics3D(states, ctrl, param):
     dsa         = sr
     dstates     = vertcat(dx, dy, dpsi, dv, dr, du, dsa)
 
-    FZFL_con    = FZF / 2 - ((FY1 + FY2) / M) * KFZYF - TS_FZ
-    FZFR_con    = FZF / 2 + ((FY1 + FY2) / M) * KFZYF - TS_FZ
-    FZRL_con    = FZR / 2 - ((FY1 + FY2) / M) * KFZYR - TS_FZ
-    FZRR_con    = FZR / 2 + ((FY1 + FY2) / M) * KFZYR - TS_FZ
+    # FZFL_con    = FZF / 2 - ((FY1 + FY2) / M) * KFZYF - TS_FZ
+    # FZFR_con    = FZF / 2 + ((FY1 + FY2) / M) * KFZYF - TS_FZ
+    # FZRL_con    = FZR / 2 - ((FY1 + FY2) / M) * KFZYR - TS_FZ
+    # FZRR_con    = FZR / 2 + ((FY1 + FY2) / M) * KFZYR - TS_FZ
+
+    FZFL_con    = FZF / 2 - (r * ux - gy) * KFZYF - TS_FZ
+    FZFR_con    = FZF / 2 + (r * ux - gy) * KFZYF - TS_FZ
+    FZRL_con    = FZR / 2 - (r * ux - gy) * KFZYR - TS_FZ
+    FZRR_con    = FZR / 2 + (r * ux - gy) * KFZYR - TS_FZ
+
     FORCE_con1   =  ((ax - r*v - gx) * M ) -  ( ( 2 * KFZF * gz + 2 * KFZR * gz) * mu -  TS_FZ_circle)
     FORCE_con2   = -( ( 2 * KFZF * gz + 2 * KFZR * gz) * mu -  TS_FZ_circle) - ((ax - r*v - gx) * M )
     # FORCE_con   = 0
     ax_max_con  = ax - r*v - gx - ax_max 
     ax_min_con  = ax_min - ax + r * v + gx
-    ks_con         = exp(rho_ks * (- FZFL_con)) + exp(rho_ks * (- FZFR_con)) + exp(rho_ks * (- FZRL_con)) + exp(rho_ks * (- FZRR_con))+ exp(rho_ks * ax_max_con) + exp(rho_ks * ax_min_con)
+    # ks_con         = exp(rho_ks * (- FZFL_con)) + exp(rho_ks * (- FZFR_con)) + exp(rho_ks * (- FZRL_con)) + exp(rho_ks * (- FZRR_con))+ exp(rho_ks * ax_max_con) + exp(rho_ks * ax_min_con)
+    ks_con         = exp(rho_ks * ax_max_con) + exp(rho_ks * ax_min_con) #1/rho_ks*( exp(rho_ks * (- FZFL_con)) + exp(rho_ks * (- FZFR_con)) + exp(rho_ks * (- FZRL_con)) + exp(rho_ks * (- FZRR_con)))
+    # con = vertcat(ks_con, FORCE_con1, FORCE_con2)
     con = vertcat(ks_con, FORCE_con1, FORCE_con2)
     L = 0.1 * sa**2 + 0.05 * ax**2 + 0.12 * v**2 + 0.3 * sr**2 + 0.02 * (alpha_f**2 + alpha_r**2) + 0.1 * gy**2 + 0.1 * y**2
     return dstates, con, L
@@ -264,7 +272,7 @@ def TransferData(w_opt, OCPParams):
 
 def init_states_predict(init_states, controls):
     dt = 1e-3
-    data_size = 500
+    data_size = 100
     num_states = init_states.shape[0]
     states_list = np.zeros([data_size, num_states])
 
@@ -276,7 +284,7 @@ def init_states_predict(init_states, controls):
         cur_states = cur_states + dt* np.hstack([dstates, 0.0])
         states_list[idx+1,:] = cur_states
         states_list[idx+1,-1] = ctrl[0]
-    return states_list[499,:]
+    return states_list[99,:]
 
 def defineSolver(init_states, goal, obslist, OCPParams):
     # Specifty OCP parameters
@@ -369,6 +377,12 @@ def defineSolver(init_states, goal, obslist, OCPParams):
         init_states[5] = XL[5]
     elif init_states[5] >= XU[5]:
         init_states[5] = XU[5]
+
+    if init_states[6] <= XL[6]:
+        init_states[6] = XL[6]
+    elif init_states[6] >= XU[6]:
+        init_states[6] = XU[6]
+
     mystates = init_states
 
 
@@ -432,9 +446,34 @@ def defineSolver(init_states, goal, obslist, OCPParams):
     w = vertcat(*w)
     g = vertcat(*g)
     prob = {'f': J, 'x': w, 'g': g, 'p':par}
-    opts = {'ipopt.print_level': 5}
+    # opts = {'ipopt.print_level': 0,
+    #         'ipopt.tol' : 4e-2,
+    #         'ipopt.warm_start_init_point' : 'yes',
+    #         # 'ipopt.warm_start_bound_push' : 1e-9,
+    #         # 'ipopt.warm_start_bound_frac' : 1e-9,
+    #         # 'ipopt.warm_start_slack_bound_frac' : 1e-9,
+    #         # 'ipopt.warm_start_slack_bound_push' : 1e-9,
+    #         # 'ipopt.warm_start_mult_bound_push' : 1e-9,
+    #         'ipopt.dual_inf_tol': 2.,
+    #         'ipopt.constr_viol_tol' : 5e-1,
+    #         'ipopt.compl_inf_tol' : 5e-1,
+    #         'ipopt.acceptable_tol' : 1.5e-1,
+    #         # 'ipopt.acceptable_constr_viol_tol' :0.02,
+    #         # 'ipopt.acceptable_dual_inf_tol ' : 1e10,
+    #         # 'ipopt.acceptable_compl_inf_tol ' : 0.02,
+    #         'ipopt.mu_strategy' : 'adaptive'}
+    
+    opts = {'ipopt.print_level': 1,
+            'ipopt.tol' : 4e-3, 
+            'ipopt.max_cpu_time': 0.1,
+            'ipopt.warm_start_init_point' : 'yes',
+            'ipopt.dual_inf_tol': 2.,
+            'ipopt.constr_viol_tol' : 5e-1,
+            'ipopt.compl_inf_tol' : 5e-1,
+            'ipopt.acceptable_tol' : 1.5e-1,
+            # 'ipopt.mu_strategy' : 'adaptive'
+            }
     solver = nlpsol('solver', 'ipopt', prob, opts)
-
 
 
     w0 = np.concatenate(w0, axis = None)
@@ -496,7 +535,6 @@ def main():
 
     w_opt = np.hstack([1e-3,  np.tile(np.hstack([init_states, np.array([0.01, 0.01])]), OCPParams["Nck"]+1)])  #np.zeros(Nck*(7+2)+1)
     w_opt[0] = 0.0
-    print(init_states.shape)
 
     while(True):
         if os.path.exists("stop.txt"):
@@ -512,12 +550,12 @@ def main():
                 time.sleep(0.001)
 
 
-
+                # print(mat)
                 np.savetxt('E:/workspace/Vehicle_Modeling_CPP/MRZR_Control/bin/Release/MPC_cmd.txt',mat ,fmt='%.3f')
                 time.sleep(0.001)
                 np.savetxt('E:/workspace/Vehicle_Modeling_CPP/MRZR_Control/bin/Release/cmd_sent.txt', [0] ,fmt='%.3f')
                 time.sleep(0.001)
-                predicted_init_states = init_states_predict(init_states, mat[:500,:])
+                predicted_init_states = init_states_predict(init_states, mat[:100,:])
 
                 ocp_start = time.time()
                 # w_opt = runMPC(predicted_init_states, goal, obslist, ter_params, f, OCPParams)
@@ -527,8 +565,8 @@ def main():
                 w_opt = np.hstack([1e-3,  np.tile(np.hstack([predicted_init_states.T, np.array([1e-3, 0])]), OCPParams["Nck"]+1)])  #np.zeros(Nck*(7+2)+1)
 
 
-                # params = np.tile(np.array([zparx, 0.1, zparxx, zparyy,zparxy]), OCPParams["Nck"]+1)
-
+                # params = np.tile(np.array([zparx, 0.4, zparxx, zparyy,zparxy]), OCPParams["Nck"]+1)
+                # w_opt[1:nx+1] = predicted_init_states
 
                 sol = solver(lbx = lbw,
                         ubx = ubw,
@@ -559,8 +597,9 @@ def main():
             else:
                 time.sleep(0.01)
 
-    print(w_opt_list)
-    print(solve_time_list)
+    print(np.max(solve_time_list))
+    print(np.mean(solve_time_list))
+    
     KeySolutions = {
         "Solution":w_opt_list,
         "Time":solve_time_list
